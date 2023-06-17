@@ -25,6 +25,8 @@ TNEB_LOGIN_URL=
 TNEB_PASSWORD=
 TNEB_USERNAME=
 RETRY_ATTEMPTS=3
+CRON_EXP="0 0 8 10 * *"
+CRON_EXP_DESC="10th of each month by 8:00 AM"
 ```
 5. Taking the project for a test run: `npm run dev:start`
 6. Build the project to an executable: `npm run package`. Creates an executable in the _build/_ directory

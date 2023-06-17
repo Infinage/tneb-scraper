@@ -39,5 +39,5 @@ const startJob = async (): Promise<void> => {
 }
 
 // Schedule cron job to run at 10th of each month by 8am
-console.info("The Application is up. And is scheduled to run 10th of each month by 8:00 AM");
-cron.schedule('0 0 8 10 * *', () => startJob());
+console.info(`The Application is up. And is scheduled to run ${process.env.CRON_EXP_DESC}`);
+cron.schedule(`${process.env.CRON_EXP}`, () => startJob());
