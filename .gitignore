@@ -1,6 +1,6 @@
-/node_modules
-/images
 .env
-package-lock.json
-/build
-eb-mapping.ts
+poetry.lock
+playground.ipynb
+.ipynb_checkpoints
+__pycache__
+eb-mapping.json
