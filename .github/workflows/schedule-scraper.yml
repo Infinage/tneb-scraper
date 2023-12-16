@@ -4,29 +4,25 @@ on:
     schedule:
         # Run every sunday @ 00:00
         - cron: '0 0 * * 0'
-
 jobs:
-
     scrape-tneb:
-
         runs-on: ubuntu-latest
-
         steps:
             - name: Checkout code
               uses: actions/checkout@v3
 
             - name: Prepare Environment
-              run: echo "${{ secrets.EB_MAPPING }}" > eb-mapping.json
+              run: |
+                echo "${{ secrets.EB_MAPPING }}" > eb-mapping.json
+                echo "GMAIL_APP_PWD=${{ secrets.GMAIL_APP_PWD }}" >> .env
+                echo "GMAIL_FROM_ADDRESS=${{ secrets.GMAIL_FROM_ADDRESS }}" >> .env
+                echo "GMAIL_TO_ADDRESS=${{ secrets.GMAIL_TO_ADDRESS }}" >> .env
+                echo "TNEB_PASSWORD=${{ secrets.TNEB_PASSWORD }}" >> .env
+                echo "TNEB_USERNAME=${{ secrets.TNEB_USERNAME }}" >> .env
+                echo "TNEB_LOGIN_URL=${{ secrets.TNEB_LOGIN_URL }}" >> .env
+                echo "RETRY_ATTEMPTS=${{ secrets.RETRY_ATTEMPTS }}" >> .env
 
             - name: Build the Docker Container
-              env:
-                GMAIL_APP_PWD: '${{ secrets.GMAIL_APP_PWD }}' 
-                GMAIL_FROM_ADDRESS: '${{ secrets.GMAIL_FROM_ADDRESS }}'
-                GMAIL_TO_ADDRESS: '${{ secrets.GMAIL_TO_ADDRESS }}'
-                TNEB_PASSWORD: '${{ secrets.TNEB_PASSWORD }}'
-                TNEB_USERNAME: '${{ secrets.TNEB_USERNAME }}'
-                TNEB_LOGIN_URL: '${{ secrets.TNEB_LOGIN_URL }}'
-                RETRY_ATTEMPTS: 3
               run: |
                 docker build -t tneb-scraper:latest .
-                docker run --rm tneb-scraper
+                docker run --rm --env-file .env tneb-scraper:latest
