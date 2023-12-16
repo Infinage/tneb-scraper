@@ -13,7 +13,9 @@ jobs:
 
             - name: Prepare Environment
               run: |
-                echo "${{ secrets.EB_MAPPING }}" > eb-mapping.json
+                echo '${{ secrets.EB_MAPPING }}' > eb-mapping.json
+                cat eb-mapping.json | json_pp >> /dev/null
+
                 echo "GMAIL_APP_PWD=${{ secrets.GMAIL_APP_PWD }}" >> .env
                 echo "GMAIL_FROM_ADDRESS=${{ secrets.GMAIL_FROM_ADDRESS }}" >> .env
                 echo "GMAIL_TO_ADDRESS=${{ secrets.GMAIL_TO_ADDRESS }}" >> .env
@@ -21,6 +23,7 @@ jobs:
                 echo "TNEB_USERNAME=${{ secrets.TNEB_USERNAME }}" >> .env
                 echo "TNEB_LOGIN_URL=${{ secrets.TNEB_LOGIN_URL }}" >> .env
                 echo "RETRY_ATTEMPTS=${{ secrets.RETRY_ATTEMPTS }}" >> .env
+                wc -l .env
 
             - name: Build the Docker Container
               run: |
