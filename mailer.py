@@ -1,12 +1,16 @@
 import pandas as pd
 import datetime as dt
+from email import encoders
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
-import ssl, smtplib
+import logging, ssl, smtplib, os, zipfile, io, glob
 
 class TNEBMailer:
 
-    def __init__(self, FROM_EMAIL, FROM_EMAIL_PWD, TO_EMAIL):
+    def __init__(self, logger: logging.Logger, debug_path: str, FROM_EMAIL: str, FROM_EMAIL_PWD: str, TO_EMAIL: str):
+        self.logger = logger
+        self.debug_path = debug_path
         self.FROM_EMAIL = FROM_EMAIL
         self.TO_EMAIL = TO_EMAIL
         self.FROM_EMAIL_PWD = FROM_EMAIL_PWD
@@ -17,28 +21,40 @@ class TNEBMailer:
         context = ssl.create_default_context()
 
         try:
-            if len(bill_details) == 0:
-                raise Exception("No scraped results were found.")
+            if bill_details is None or len(bill_details) == 0:
+                self.logger.warn("No scraped results were found.")
 
-            email_html = TNEBMailer.dataframe_to_html(bill_details)
-            print("Dataframe converted to HTML.")
+                # Create zipfile for attaching the logs
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'a', zipfile.ZIP_DEFLATED, False) as zf:
+                    for file in glob.glob(self.debug_path + "/*"):
+                        with open(file, 'rb') as f:
+                            zf.writestr(file.split(os.path.sep)[-1], f.read())
 
-            email_mime = self.create_mime_type(email_html)
-            print("Mimetype File created with HTML.")
+                email_html = "No scraped results were found. PFA Logs & Screenshot for the code run."
+                email_mime = self.create_mime_type(email_html, attachment=zip_buffer, failureFlag=True)
+
+            else:
+                email_html = TNEBMailer.dataframe_to_html(bill_details)
+                self.logger.info("Dataframe converted to HTML.")
+
+                email_mime = self.create_mime_type(email_html)
+                self.logger.info("Mimetype File created with HTML.")
 
             server.starttls(context=context)
             server.login(self.FROM_EMAIL, self.FROM_EMAIL_PWD)
-            print("Authentication GMAIL Server with provided credentials successful.")
+            self.logger.info("Authentication GMAIL Server with provided credentials successful.")
 
             server.sendmail(
                 self.FROM_EMAIL,
                 self.TO_EMAIL,
                 email_mime.as_string(),
             )
-            print ("Mail sent successfully.")
+
+            self.logger.info ("Mail sent successfully.")
 
         except Exception as e:
-            print(f"An error occurred while sending email: {e}")
+            self.logger.info(f"An error occurred while sending email: {e}")
 
         finally:
             server.close()
@@ -99,12 +115,21 @@ class TNEBMailer:
 
         return html_table
 
-    def create_mime_type(self, html_str):
+    def create_mime_type(self, html_str, attachment=None, failureFlag=False):
         message = MIMEMultipart("alternative")
-        message["Subject"] = "TamilNadu EB Bill - " + dt.date.today().strftime("%d %B %Y")
+        message["Subject"] = f"Job {'failed' if failureFlag else 'succeeded'}: TamilNadu EB Bill - {dt.date.today().strftime('%d %B %Y')}"
         message["From"] = self.FROM_EMAIL
         message["To"] = self.TO_EMAIL
 
         html_part = MIMEText(html_str, "html")
         message.attach(html_part)
+
+        # Attach the log file if provided
+        if attachment:
+            attachment_part = MIMEBase("application", "octet-stream")
+            attachment_part.set_payload(attachment.getvalue())
+            encoders.encode_base64(attachment_part)
+            attachment_part.add_header("Content-Disposition", f"attachment; filename=logs-{int(dt.datetime.now().timestamp() * 1000000)}.zip")
+            message.attach(attachment_part)
+
         return message
