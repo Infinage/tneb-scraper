@@ -2,3 +2,5 @@ __pycache__
 .ipynb_checkpoints
 .venv
 playground.ipynb
+.env
+__pycache__

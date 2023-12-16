@@ -10,8 +10,6 @@ services:
     env_file:
       - .env
     
-    # Optionally create a volume with the log path
-    volumes:
-      - ./debug:/app/debug
-
-    command: ["poetry", "run", "python", "main.py"]
+    # # Optionally create a volume with the log path
+    # volumes:
+    #   - ./debug:/app/debug

@@ -9,3 +9,5 @@ RUN wget https://bootstrap.pypa.io/get-pip.py
 RUN python get-pip.py
 RUN python -m pip install poetry
 RUN poetry install --without dev
+
+CMD ["poetry", "run", "python", "main.py"]
