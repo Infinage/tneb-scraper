@@ -1,4 +1,4 @@
-name: Scrape TNEB Website
+name: Build & scrape TNEB Website
 on:
     push:
     schedule:
@@ -11,9 +11,15 @@ jobs:
 
         runs-on: ubuntu-latest
 
-        container:
-            image: tneb-scraper:latest
-            env:
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v3
+
+            - name: Prepare Environment
+              run: echo "${{ secrets.EB_MAPPING }}" > eb-mapping.json
+
+            - name: Build the Docker Container
+              env:
                 GMAIL_APP_PWD: '${{ secrets.GMAIL_APP_PWD }}' 
                 GMAIL_FROM_ADDRESS: '${{ secrets.GMAIL_FROM_ADDRESS }}'
                 GMAIL_TO_ADDRESS: '${{ secrets.GMAIL_TO_ADDRESS }}'
@@ -21,13 +27,6 @@ jobs:
                 TNEB_USERNAME: '${{ secrets.TNEB_USERNAME }}'
                 TNEB_LOGIN_URL: '${{ secrets.TNEB_LOGIN_URL }}'
                 RETRY_ATTEMPTS: 3
-
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v2
-
-            - name: Prepare Environment
-              run: echo "${{ secrets.EB_MAPPING }}" > eb-mapping.json
-
-            - name: Run TNEB Scraper
-              run: poetry run python main.py
+              run: |
+                docker build -t tneb-scraper:latest .
+                docker run --rm tneb-scraper
