@@ -4,6 +4,7 @@ from email import encoders
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 import logging, ssl, smtplib, os, zipfile, io, glob
 
 class TNEBMailer:
@@ -21,8 +22,9 @@ class TNEBMailer:
         context = ssl.create_default_context()
 
         try:
-            if bill_details is None or len(bill_details) == 0:
-                self.logger.warn("No scraped results were found.")
+            if bill_details is None:
+
+                self.logger.warn("TNEB could not be scraped.")
 
                 # Create zipfile for attaching the logs
                 zip_buffer = io.BytesIO()
@@ -31,10 +33,22 @@ class TNEBMailer:
                         with open(file, 'rb') as f:
                             zf.writestr(file.split(os.path.sep)[-1], f.read())
 
-                email_html = "No scraped results were found. PFA Logs & Screenshot for the code run."
-                email_mime = self.create_mime_type(email_html, attachment=zip_buffer, failureFlag=True)
+                email_html = "TNEB scraping has failed. PFA Logs & Screenshot for the code run."
+                email_mime = self.create_mime_type(email_html, attachment=zip_buffer, attachment_type='zip', failureFlag=True)
+            
+            elif len(bill_details) == 0:
+
+                self.logger.info("No scraped results were found.")
+                
+                # Attach image to email for confirmation
+                with open(f"{self.debug_path}/bill-details.png", "rb") as f:
+                    img_buffer = f.read()
+
+                email_html = TNEBMailer.dataframe_to_html(bill_details)
+                email_mime = self.create_mime_type(email_html, attachment=img_buffer, attachment_type='img', failureFlag=False)
 
             else:
+
                 email_html = TNEBMailer.dataframe_to_html(bill_details)
                 self.logger.info("Dataframe converted to HTML.")
 
@@ -100,22 +114,30 @@ class TNEBMailer:
                     <tbody>
         """
 
-        for index, bill in bill_details.iterrows():
-            html_table += f"""
+        if len(bill_details) > 0:
+            for index, bill in bill_details.iterrows():
+                html_table += f"""
+                <tr>
+                    <td>{index + 1}</td>
+                    <td>{bill['Consumer No']}</td>
+                    <td>{bill['Portion']}</td>
+                    <td>{bill['Bill Amt (Rs)']}</td>
+                    <td>{bill['Due Date']}</td>
+                </tr>
+                """
+
+        else:
+           html_table += """
             <tr>
-                <td>{index + 1}</td>
-                <td>{bill['Consumer No']}</td>
-                <td>{bill['Portion']}</td>
-                <td>{bill['Bill Amt (Rs)']}</td>
-                <td>{bill['Due Date']}</td>
+                <td colspan='5'>No scraped results were found. All bills have been paid.</td>
             </tr>
-            """
+            """ 
 
         html_table += "</tbody></table></body></html>"
 
         return html_table
 
-    def create_mime_type(self, html_str, attachment=None, failureFlag=False):
+    def create_mime_type(self, html_str, attachment=None, attachment_type=None, failureFlag=False):
         message = MIMEMultipart("alternative")
         message["Subject"] = f"Job {'failed' if failureFlag else 'succeeded'}: TamilNadu EB Bill - {dt.date.today().strftime('%d %B %Y')}"
         message["From"] = self.FROM_EMAIL
@@ -126,10 +148,20 @@ class TNEBMailer:
 
         # Attach the log file if provided
         if attachment:
-            attachment_part = MIMEBase("application", "octet-stream")
-            attachment_part.set_payload(attachment.getvalue())
-            encoders.encode_base64(attachment_part)
-            attachment_part.add_header("Content-Disposition", f"attachment; filename=logs-{int(dt.datetime.now().timestamp() * 1000000)}.zip")
-            message.attach(attachment_part)
+
+            if attachment_type == 'zip':
+                attachment_part = MIMEBase("application", "octet-stream")
+                attachment_part.set_payload(attachment.getvalue())
+                encoders.encode_base64(attachment_part)
+                attachment_part.add_header("Content-Disposition", f"attachment; filename=logs-{int(dt.datetime.now().timestamp() * 1000000)}.zip")
+                message.attach(attachment_part)
+
+            elif attachment_type == 'img':
+                attachment_part = MIMEImage(attachment, name="Bill-Details-Empty.png")
+                message.attach(attachment_part)
+
+            else:
+                self.logger.error(f"Unsupported attachment type provided: {attachment_type}")
+                raise NotImplementedError(f"{attachment_type} type of attachments are not suppoerted yet.")
 
         return message

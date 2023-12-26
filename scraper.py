@@ -62,6 +62,10 @@ class TNEBScraper:
 
         try:
 
+          # Maximize the screen for better previews
+          driver.set_window_size(1280, 710)
+          driver.maximize_window()
+
           # open TNEB Login page
           driver.get(self.TNEB_LOGIN_URL)
           driver.save_screenshot(f"{self.debug_path}/login-page.png")
@@ -119,16 +123,21 @@ class TNEBScraper:
           bill_details = bill_details.dropna(how='all')
           self.logger.info("Columns renamed & NA values were dropped.")
 
-          # Load eb-mapping.json file
-          eb_mapping = json.load(open("./eb-mapping.json"))
-          self.logger.info("Loaded `eb-mapping.json` file as dictionary.")
-          
-          # Merge it over eb-mapping to get the associated Portion
-          eb_mapping = pd.Series(eb_mapping).reset_index().rename({"index": "Consumer No", 0: "Portion"}, axis=1)
-          eb_mapping['Consumer No'] = eb_mapping['Consumer No'].astype('int64')
-          bill_details = bill_details.merge(eb_mapping, on='Consumer No').sort_values("Portion")
-          bill_details = bill_details.reset_index(drop=True)
-          self.logger.info(f"Concatenated with `eb-mapping.json` file. Shape: {bill_details.shape}")
+          if len(bill_details) == 1 and bill_details.iloc[0, 0] == 'No records found.':
+            self.logger.info("No entries found in the dataframe.")
+            return pd.DataFrame()
 
-          # Return the dataframe for downstream ops
-          return bill_details
+          else:
+            # Load eb-mapping.json file
+            eb_mapping = json.load(open("./eb-mapping.json"))
+            self.logger.info("Loaded `eb-mapping.json` file as dictionary.")
+            
+            # Merge it over eb-mapping to get the associated Portion
+            eb_mapping = pd.Series(eb_mapping).reset_index().rename({"index": "Consumer No", 0: "Portion"}, axis=1)
+            eb_mapping['Consumer No'] = eb_mapping['Consumer No'].astype('int64')
+            bill_details = bill_details.merge(eb_mapping, on='Consumer No').sort_values("Portion")
+            bill_details = bill_details.reset_index(drop=True)
+            self.logger.info(f"Concatenated with `eb-mapping.json` file. Shape: {bill_details.shape}")
+
+            # Return the dataframe for downstream ops
+            return bill_details
