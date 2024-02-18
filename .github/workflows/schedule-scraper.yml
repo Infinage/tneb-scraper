@@ -9,7 +9,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4
 
             - name: Prepare Environment
               run: |
@@ -29,3 +29,9 @@ jobs:
               run: |
                 docker build -t tneb-scraper:latest .
                 docker run --rm --env-file .env tneb-scraper:latest
+
+            - name: Keep GH Action Alive
+              uses: gautamkrishnar/keepalive-workflow@master
+              with:
+                  use_api: true
+                  gh_token: ${{ secrets.PAT_TOKEN }}
