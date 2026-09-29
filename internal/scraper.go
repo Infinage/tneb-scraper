@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -25,30 +26,45 @@ type EBBill struct {
 	Due          time.Time
 }
 
-// extractBills fetches EB bill from tnebnet and maps the consumer number against 
-// provided mapping.
+// extractBills fetches EB bill from tnebnet and maps the consumer number against
+// provided mapping. Always captures the final page screenshot into './tmp/screenshots'
 func ExtractBills(login, username, password string, mapping map[string]string) (
 	bills []EBBill, err error) {
 
 	browser := rod.New().MustConnect()
-	page := browser.MustPage(login)
+	page := browser.MustPage(login).Timeout(10 * time.Second)
+	defer browser.MustClose()
 
-	// If any error has been hit, save screenshot to '/tmp/screenshots'
+	// Always screenshot the final state to './tmp/screenshots/<timestamp>.png'
 	defer func() {
-		if err != nil { 
-			page.MustScreenshot() 
+		r := recover()
+		if r != nil {
+			err = fmt.Errorf("scrape fail: %v", r)	
+		}
+
+		img, scErr := page.Screenshot(true, nil)
+		if scErr != nil {
+			err = fmt.Errorf("%w (screenshot failed: %w)", err, scErr)
+			return
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		scErr = os.WriteFile("tmp/" + now + ".png", img, 0644)
+		if scErr != nil {
+			err = fmt.Errorf("%w (screenshot create: %w)", err, scErr)
+			return
 		}
 	}()
 
 	captchaElem := page.MustElement("img#CaptchaImgID")
 	img, err := captchaElem.Screenshot(proto.PageCaptureScreenshotFormatPng, 0)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to screenshot:", err)
+		return nil, fmt.Errorf("screenshot captcha fail: %w", err)
 	}
 
 	captcha, err := extactCaptcha(img)
 	if err != nil || captcha == "" {
-		return nil, fmt.Errorf("extactCaptcha fail:", err)
+		return nil, fmt.Errorf("extactCaptcha fail: %w", err)
 	}
 
 	// Enter credentials and login
@@ -72,7 +88,7 @@ func ExtractBills(login, username, password string, mapping map[string]string) (
 	// Ensure all required headers are present
 	for _, required := range []fieldKey{fieldConsumerNo, fieldBillAmt, fieldDueDate} {
 		if _, ok := headers[string(required)]; !ok {
-			return nil, fmt.Errorf("Missing mandatory header: %q", required)
+			return nil, fmt.Errorf("missing mandatory header: %q", required)
 		}
 	}
 
@@ -83,7 +99,7 @@ func ExtractBills(login, username, password string, mapping map[string]string) (
 		}
 
 		if want, got := len(rows), len(headers); want != got {
-			return nil, fmt.Errorf("Expected %d columns, got %d from table body", want, got)
+			return nil, fmt.Errorf("expected %d columns, got %d from table body", want, got)
 		}
 
 		consumerNo := rows[headers[string(fieldConsumerNo)]].MustText()
@@ -91,13 +107,13 @@ func ExtractBills(login, username, password string, mapping map[string]string) (
 		billAmtStr := rows[headers[string(fieldBillAmt)]].MustText()
 		billAmt, err := strconv.ParseFloat(billAmtStr, 32)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid bill amount:", billAmtStr)
+			return nil, fmt.Errorf("invalid bill amount %q: %w", billAmtStr, err)
 		}
 
 		dueStr := rows[headers[string(fieldDueDate)]].MustText()
 		due, err := time.Parse("02-01-06", dueStr)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid due date %q: %v", dueStr, err)
+			return nil, fmt.Errorf("invalid due date %q: %w", dueStr, err)
 		}
 
 		bills = append(bills, EBBill{ConsumerNo: consumerNo, BillAmt: float32(billAmt), Due: due})
@@ -105,7 +121,7 @@ func ExtractBills(login, username, password string, mapping map[string]string) (
 
 	// Map consumer name from the provided mapping, blank if no mapping found
 	for idx := range bills {
-		bills[idx].ConsumerName = mapping[bills[idx].ConsumerNo]	
+		bills[idx].ConsumerName = mapping[bills[idx].ConsumerNo]
 	}
 
 	return bills, nil

@@ -39,7 +39,6 @@ func LoadConsumerMapping() (map[string]string, error) {
 	if err = dec.Decode(&mapping); err != nil {
 		return nil, fmt.Errorf("parse '.consumer-mapping.json': %w", err)
 	}
-	
+
 	return mapping, nil
 }
-

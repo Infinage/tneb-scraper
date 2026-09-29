@@ -22,6 +22,18 @@ func main() {
 		log.Fatalln("Env: TNEB_USERNAME, TNEB_PASSWORD or TNEB_LOGIN_URL is not set")
 	}
 
+	gmailSender := os.Getenv("GMAIL_FROM_ADDRESS")
+	gmailPassword := os.Getenv("GMAIL_APP_PWD")
+	gmailTarget := os.Getenv("GMAIL_TO_ADDRESS")
+
+	// Skip sending out email if mail related env variables are not set
+	skipEmail := false
+	if gmailSender == "" || gmailPassword == "" || gmailTarget == "" {
+		skipEmail = true
+		log.Println("Env: GMAIL_FROM_ADDRESS, GMAIL_TO_ADDRESS or GMAIL_APP_PWD " +
+			"is not set (mail step skipped)")
+	}
+
 	// Load the mapping file
 	mapping, err := internal.LoadConsumerMapping()
 	if err != nil {
@@ -31,9 +43,17 @@ func main() {
 
 	bills, err := internal.ExtractBills(loginURL, username, password, mapping)
 	if err != nil {
-		log.Fatalln("Failed to extract EB bills:", err)
+		log.Println("Failed to extract EB bills:", err)
+	} else {
+		log.Println("EB Bill details:", bills)
 	}
 
-	log.Println(bills)
+	if !skipEmail {
+		err = internal.SendMail(gmailSender, gmailPassword, gmailTarget, bills, err)
+		if err != nil {
+			log.Fatalln("Failed to send email:", err)
+		}
+	}
+
 	log.Println("Process finished successfully.")
 }
