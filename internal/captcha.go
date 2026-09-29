@@ -12,7 +12,8 @@ func extractCaptcha(img []byte) (string, error) {
 	cmd := exec.Command(
 		"tesseract",
 		"stdin", "stdout",
-		"--psm", "8",
+		"--psm", "13",
+		"--dpi", "300",
 		"-c", "tessedit_char_whitelist=0123456789",
 	)
 	cmd.Stdin = bytes.NewBuffer(img)

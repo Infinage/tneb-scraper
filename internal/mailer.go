@@ -9,7 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	_ "embed"
 )
+
+//go:embed assets/bills.html
+var billsTemplate string
 
 // fetchLatestScreenshot lookups in the given path for .png files having the
 // most recent modification time.
@@ -63,7 +68,7 @@ func SendMail(username, password, target string, bills []EBBill, extractErr erro
 	boundary := "TNEB-SCRAPER-BOUNDARY"
 
 	templFunc := template.FuncMap{"inc": func(i int) int { return i + 1 }}
-	templ, err := template.New("").Funcs(templFunc).ParseFiles("bills.html")
+	templ, err := template.New("bills").Funcs(templFunc).Parse(billsTemplate)
 	if err != nil {
 		return fmt.Errorf("template parse: %w", err)
 	}
@@ -87,7 +92,7 @@ func SendMail(username, password, target string, bills []EBBill, extractErr erro
 	if extractErr != nil {
 		fmt.Fprintf(&body, "<p>Failed to extract bills:</p><pre>%v</pre>", extractErr)
 	} else {
-		if err = templ.ExecuteTemplate(&body, "bills.html", bills); err != nil {
+		if err = templ.ExecuteTemplate(&body, "bills", bills); err != nil {
 			return fmt.Errorf("exec template: %w", err)
 		}
 	}

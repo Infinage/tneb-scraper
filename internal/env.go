@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// LoadEnv reads from '.env' in current path and sets the key as env variable.
-func LoadEnv() error {
+// loadEnv reads from '.env' in current path and sets the key as env variable.
+func loadEnv() error {
 	f, err := os.Open(".env")
 	if err != nil {
 		return fmt.Errorf("load '.env': %w", err)
@@ -28,8 +28,8 @@ func LoadEnv() error {
 	return scanner.Err()
 }
 
-// LoadConsumerMapping loads 'consumer-mapping.json' file from disk.
-func LoadConsumerMapping() (map[string]string, error) {
+// loadConsumerMapping loads 'consumer-mapping.json' file from disk.
+func loadConsumerMapping() (map[string]string, error) {
 	f, err := os.Open(".consumer-mapping.json")
 	if err != nil {
 		return nil, fmt.Errorf("load '.consumer-mapping.json': %w", err)

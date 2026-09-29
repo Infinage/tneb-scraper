@@ -51,7 +51,7 @@ func scraperOnExit(page *rod.Page, err *error) {
 
 	// Screenshot latest status
 	var img []byte
-	img, scErr = page.Screenshot(true, nil)
+	img, scErr = page.CancelTimeout().Screenshot(true, nil)
 	if scErr != nil {
 		scErr = fmt.Errorf("screenshot failed: %w", scErr)
 		return
@@ -75,25 +75,34 @@ func scraperOnExit(page *rod.Page, err *error) {
 
 // extractBills fetches EB bill from tnebnet and maps the consumer number against
 // provided mapping. Always captures the final page screenshot into './tmp/screenshots'
-func ExtractBills(login, username, password string, mapping map[string]string) (
+func extractBills(login, username, password string, mapping map[string]string) (
 	bills []EBBill, err error) {
 
 	browser := rod.New().MustConnect()
-	page := browser.MustPage(login).Timeout(10 * time.Second)
+	page := browser.MustPage(login).Timeout(30 * time.Second)
 	defer browser.MustClose()
 
 	// Always screenshot the final state to './tmp/screenshots/<timestamp>.png'
 	defer scraperOnExit(page, &err)
 
 	captchaElem := page.MustElement("img#CaptchaImgID")
-	img, err := captchaElem.Screenshot(proto.PageCaptureScreenshotFormatPng, 0)
+	box := captchaElem.MustShape().Box()
+	clip := &proto.PageViewport{
+		X: box.X + 3, Y: box.Y + 3,
+		Width:  box.Width - 6,
+		Height: box.Height - 6,
+		Scale:  1,
+	}
+	img, err := page.Screenshot(false, &proto.PageCaptureScreenshot{Clip: clip})
 	if err != nil {
 		return nil, fmt.Errorf("screenshot captcha fail: %w", err)
 	}
 
 	captcha, err := extractCaptcha(img)
-	if err != nil || captcha == "" {
-		return nil, fmt.Errorf("extactCaptcha fail: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("extractCaptcha fail: %w", err)
+	} else if captcha == "" {
+		return nil, fmt.Errorf("extractCaptcha returned empty")
 	}
 
 	// Enter credentials and login
