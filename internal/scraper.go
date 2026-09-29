@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -26,6 +27,52 @@ type EBBill struct {
 	Due          time.Time
 }
 
+// scraperOnExit recovers the stack if it had panicked and screenshots
+// the browser state into './tmp/screenshots'.
+func scraperOnExit(page *rod.Page, err *error) {
+	r := recover()
+	if r != nil {
+		*err = fmt.Errorf("scrape fail: %v", r)
+	}
+
+	// Wrapping the screenshot error with the error passed in
+	var scErr error
+	defer func() {
+		if scErr == nil {
+			return
+		}
+
+		if *err != nil {
+			*err = errors.Join(*err, scErr)
+		} else {
+			*err = scErr
+		}
+	}()
+
+	// Screenshot latest status
+	var img []byte
+	img, scErr = page.Screenshot(true, nil)
+	if scErr != nil {
+		scErr = fmt.Errorf("screenshot failed: %w", scErr)
+		return
+	}
+
+	// Attempt to create a temp directory
+	scErr = os.MkdirAll("tmp/screenshots/", 0755)
+	if scErr != nil {
+		scErr = fmt.Errorf("screen dir create: %w", scErr)
+		return
+	}
+
+	// Save into 'tmp/screenshots/<timestamp>.png'
+	now := time.Now().UTC().Format("20060102T150405.000000000Z")
+	scErr = os.WriteFile("tmp/screenshots/"+now+".png", img, 0644)
+	if scErr != nil {
+		scErr = fmt.Errorf("screen create: %w", scErr)
+		return
+	}
+}
+
 // extractBills fetches EB bill from tnebnet and maps the consumer number against
 // provided mapping. Always captures the final page screenshot into './tmp/screenshots'
 func ExtractBills(login, username, password string, mapping map[string]string) (
@@ -36,25 +83,7 @@ func ExtractBills(login, username, password string, mapping map[string]string) (
 	defer browser.MustClose()
 
 	// Always screenshot the final state to './tmp/screenshots/<timestamp>.png'
-	defer func() {
-		r := recover()
-		if r != nil {
-			err = fmt.Errorf("scrape fail: %v", r)	
-		}
-
-		img, scErr := page.Screenshot(true, nil)
-		if scErr != nil {
-			err = fmt.Errorf("%w (screenshot failed: %w)", err, scErr)
-			return
-		}
-
-		now := time.Now().UTC().Format(time.RFC3339)
-		scErr = os.WriteFile("tmp/" + now + ".png", img, 0644)
-		if scErr != nil {
-			err = fmt.Errorf("%w (screenshot create: %w)", err, scErr)
-			return
-		}
-	}()
+	defer scraperOnExit(page, &err)
 
 	captchaElem := page.MustElement("img#CaptchaImgID")
 	img, err := captchaElem.Screenshot(proto.PageCaptureScreenshotFormatPng, 0)
@@ -62,7 +91,7 @@ func ExtractBills(login, username, password string, mapping map[string]string) (
 		return nil, fmt.Errorf("screenshot captcha fail: %w", err)
 	}
 
-	captcha, err := extactCaptcha(img)
+	captcha, err := extractCaptcha(img)
 	if err != nil || captcha == "" {
 		return nil, fmt.Errorf("extactCaptcha fail: %w", err)
 	}

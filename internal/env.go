@@ -14,6 +14,7 @@ func LoadEnv() error {
 	if err != nil {
 		return fmt.Errorf("load '.env': %w", err)
 	}
+	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	for lineNo := 0; scanner.Scan(); lineNo++ {
@@ -33,6 +34,7 @@ func LoadConsumerMapping() (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load '.consumer-mapping.json': %w", err)
 	}
+	defer f.Close()
 
 	mapping := make(map[string]string)
 	dec := json.NewDecoder(f)

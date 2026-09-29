@@ -6,8 +6,8 @@ import (
 	"os/exec"
 )
 
-// ExtactCaptcha calls tesseract binary and returns the number only captcha output
-func extactCaptcha(img []byte) (string, error) {
+// extractCaptcha calls tesseract binary and returns the number only captcha output
+func extractCaptcha(img []byte) (string, error) {
 	// Read tesseract from stdin from buffer, output to stdout
 	cmd := exec.Command(
 		"tesseract",

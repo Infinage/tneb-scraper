@@ -55,5 +55,10 @@ func main() {
 		}
 	}
 
+	if err != nil {
+		log.Println("Process finished with errors.")
+		return
+	}
+
 	log.Println("Process finished successfully.")
 }
