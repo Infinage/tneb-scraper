@@ -18,7 +18,11 @@ func loadEnv() error {
 
 	scanner := bufio.NewScanner(f)
 	for lineNo := 0; scanner.Scan(); lineNo++ {
-		key, value, ok := strings.Cut(scanner.Text(), "=")
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
 		if !ok {
 			return fmt.Errorf("invalid 'key=value' pair at %d", lineNo)
 		}

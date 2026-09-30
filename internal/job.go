@@ -9,15 +9,15 @@ import (
 )
 
 // runJob executes the tneb-scraper job once
-func runJob(r runConfig) ([]EBBill, error) {
+func runJob(rc runConfig) ([]EBBill, error) {
 	log.Println("Starting a new job")
-	bills, err := extractBills(r.ebURL, r.ebUser, r.ebPass, r.mapping)
+	bills, err := extractBills(rc)
 	if err != nil {
 		err = fmt.Errorf("failed to extract eb bills: %w", err)
 	}
 
-	if !r.skipEmail {
-		mailErr := SendMail(r.guser, r.gpass, r.gtarget, bills, err)
+	if !rc.skipEmail {
+		mailErr := SendMail(rc.guser, rc.gpass, rc.gtarget, bills, err)
 		if mailErr != nil {
 			err = errors.Join(err, fmt.Errorf("failed to send email: %w", mailErr))
 		}
@@ -83,5 +83,5 @@ func (s ScraperScheduler) Start() {
 
 // Shutdown signals the scheduler to exit.
 func (s ScraperScheduler) Shutdown() {
-	s.ch <- struct{}{}
+	close(s.ch)
 }

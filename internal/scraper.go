@@ -3,6 +3,8 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"log"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -73,17 +75,9 @@ func scraperOnExit(page *rod.Page, err *error) {
 	}
 }
 
-// extractBills fetches EB bill from tnebnet and maps the consumer number against
-// provided mapping. Always captures the final page screenshot into './tmp/screenshots'
-func extractBills(login, username, password string, mapping map[string]string) (
-	bills []EBBill, err error) {
-
-	browser := rod.New().MustConnect()
-	page := browser.MustPage(login).Timeout(30 * time.Second)
-	defer browser.MustClose()
-
-	// Always screenshot the final state to './tmp/screenshots/<timestamp>.png'
-	defer scraperOnExit(page, &err)
+func attemptLogin(page *rod.Page, username, password string) (success bool, err error) {
+	// Wait for the page network activity to settle
+	page.MustWaitLoad().MustWaitIdle()
 
 	captchaElem := page.MustElement("img#CaptchaImgID")
 	box := captchaElem.MustShape().Box()
@@ -95,23 +89,75 @@ func extractBills(login, username, password string, mapping map[string]string) (
 	}
 	img, err := page.Screenshot(false, &proto.PageCaptureScreenshot{Clip: clip})
 	if err != nil {
-		return nil, fmt.Errorf("screenshot captcha fail: %w", err)
+		return false, fmt.Errorf("screenshot captcha fail: %w", err)
 	}
 
 	captcha, err := extractCaptcha(img)
 	if err != nil {
-		return nil, fmt.Errorf("extractCaptcha fail: %w", err)
+		return false, fmt.Errorf("extractCaptcha fail: %w", err)
 	} else if captcha == "" {
-		return nil, fmt.Errorf("extractCaptcha returned empty")
+		return false, fmt.Errorf("extractCaptcha returned empty")
 	}
 
-	// Enter credentials and login
-	page.MustElement("input#userName").MustInput(username)
-	page.MustElement("input#password").MustInput(password)
-	page.MustElement("input#CaptchaID").MustInput(captcha)
-	page.MustElement("input[type='submit']").MustClick()
+	// Enter credentials and captcha
+	page.MustElement("input#userName").MustSelectAllText().MustInput(username)
+	page.MustElement("input#password").MustSelectAllText().MustInput(password)
+	page.MustElement("input#CaptchaID").MustSelectAllText().MustInput(captcha)
 
-	// Extact the table of interest
+	// Login and wait for navigation
+	wait := page.MustWaitNavigation()
+	page.MustElement("input[type='submit']").MustClick()
+	wait()
+
+	urlStr := page.MustInfo().URL
+	url, err := url.Parse(urlStr)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse page url: %s", urlStr)
+	}
+
+	return !url.Query().Has("login_error"), nil
+}
+
+// extractBills fetches EB bill from tnebnet and maps the consumer number against
+// provided mapping. Always captures the final page screenshot into './tmp/screenshots'
+func extractBills(rc runConfig) (
+	bills []EBBill, err error) {
+
+	// Connect to standalone 'rod' container if env var 'ROD_URL' is set
+	var browser *rod.Browser
+	rodURL := os.Getenv("ROD_URL")
+	if rodURL != "" {
+		browser = rod.New().ControlURL(rodURL).MustConnect()
+	} else {
+		browser = rod.New().MustConnect()
+	}
+
+	page := browser.MustPage(rc.ebURL).Timeout(time.Second * 120)
+	defer browser.MustClose()
+
+	// Always screenshot the final state to './tmp/screenshots/<timestamp>.png'
+	defer scraperOnExit(page, &err)
+
+	// Reattempt captcha utmost 3 times on failure
+	var loggedIn bool
+	for range rc.retryAttempts {
+		loggedIn, err = attemptLogin(page, rc.ebUser, rc.ebPass)
+		if err != nil {
+			return nil, fmt.Errorf("fatal login error: %w", err)
+		} else if loggedIn {
+			break
+		}
+
+		// refreshes captcha
+		page.Reload()
+	}
+
+	if !loggedIn {
+		return nil, fmt.Errorf("login fail after %d attempts", rc.retryAttempts)
+	}
+
+	// Logged in, proceed to extract the table of interest
+	log.Println("Login successful")
 	legend := page.MustElementR("legend", "^Bill Payments$")
 	table := legend.MustParent().MustElement("table")
 
@@ -143,13 +189,14 @@ func extractBills(login, username, password string, mapping map[string]string) (
 		consumerNo := rows[headers[string(fieldConsumerNo)]].MustText()
 
 		billAmtStr := rows[headers[string(fieldBillAmt)]].MustText()
-		billAmt, err := strconv.ParseFloat(billAmtStr, 32)
+		billAmtStr = strings.ReplaceAll(strings.TrimPrefix(billAmtStr, "Rs."), ",", "")
+		billAmt, err := strconv.ParseFloat(strings.TrimSpace(billAmtStr), 32)
 		if err != nil {
 			return nil, fmt.Errorf("invalid bill amount %q: %w", billAmtStr, err)
 		}
 
 		dueStr := rows[headers[string(fieldDueDate)]].MustText()
-		due, err := time.Parse("02-01-06", dueStr)
+		due, err := time.Parse("02/01/2006", strings.TrimSpace(dueStr))
 		if err != nil {
 			return nil, fmt.Errorf("invalid due date %q: %w", dueStr, err)
 		}
@@ -159,7 +206,7 @@ func extractBills(login, username, password string, mapping map[string]string) (
 
 	// Map consumer name from the provided mapping, blank if no mapping found
 	for idx := range bills {
-		bills[idx].ConsumerName = mapping[bills[idx].ConsumerNo]
+		bills[idx].ConsumerName = rc.mapping[bills[idx].ConsumerNo]
 	}
 
 	return bills, nil

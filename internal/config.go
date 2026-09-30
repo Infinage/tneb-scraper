@@ -12,6 +12,8 @@ type runConfig struct {
 	ebURL, ebUser, ebPass string
 	guser, gpass, gtarget string
 
+	retryAttempts uint // Number of login retries (workaround for captcha failures)
+
 	mapping   map[string]string // EB Consumer No -> Consumer Name
 	apiSecret string            // ScraperServer endpoint is authenticated with this key
 	skipEmail bool              // Emails are skipped if 'guser', 'gpass', 'gtarget' is not set
@@ -61,10 +63,13 @@ func NewRunConfig() (runConfig, error) {
 			"is not set (mail step skipped)")
 	}
 
-	rc.apiSecret = os.Getenv("API_SECRET_KEY")
-	if rc.apiSecret == "" {
-		log.Println("Env: API_SECRET_KEY not set, endpoint not secure.")
+	// Set API secret key, hard fail if not set
+	if rc.apiSecret = os.Getenv("API_SECRET_KEY"); rc.apiSecret == "" {
+		return runConfig{}, fmt.Errorf("env: API_SECRET_KEY not set")
 	}
+
+	// hardcoded for now
+	rc.retryAttempts = 3
 
 	return rc, nil
 }
